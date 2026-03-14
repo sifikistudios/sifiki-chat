@@ -24,14 +24,21 @@ with app.app_context():
 def index():
     return render_template('index.html')
 
+# Busca la función handle_message y cámbiala por esta:
 @socketio.on('message')
 def handle_message(data):
+    # 'data' ahora será un diccionario: {'usuario': 'paco', 'msg': 'hola'}
+    nombre = data.get('usuario', 'Anónimo')
+    mensaje_texto = data.get('msg', '')
+    
+    contenido_final = f"{nombre}: {mensaje_texto}"
+    
     # Guardar en la base de datos
-    nuevo_mensaje = Mensaje(contenido=data)
+    nuevo_mensaje = Mensaje(contenido=contenido_final)
     db.session.add(nuevo_mensaje)
     db.session.commit()
     
-    # Enviar a todos los usuarios conectados
+    # Enviar a todos
     send(data, broadcast=True)
 
 @socketio.on('connect')
