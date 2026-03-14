@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sifiki Chat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #e5ddd5; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #chat-container { width: 100%; max-width: 450px; height: 90vh; background: #fff; display: flex; flex-direction: column; border-radius: 15px; shadow: 0 10px 25px rgba(0,0,0,0.2); overflow: hidden; }
+        #header { background: #075e54; color: white; padding: 20px; text-align: center; font-size: 1.4em; font-weight: bold; }
+        #mensajes { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #efe7dd; }
+        .bubble { background: white; padding: 10px 15px; border-radius: 10px; width: fit-content; max-width: 85%; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        #input-area { padding: 15px; background: #f0f0f0; display: flex; gap: 10px; }
+        input { flex: 1; padding: 12px; border: none; border-radius: 25px; outline: none; font-size: 1em; }
+        button { background: #128c7e; color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #075e54; }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    <div id="header">Sifiki Chat 🚀</div>
+    <div id="mensajes"></div>
+    <div id="input-area">
+        <input type="text" id="texto" placeholder="Escribe un mensaje..." autocomplete="off">
+        <button onclick="enviar()">Enviar</button>
+    </div>
+</div>
+
+<script>
+    const socket = io();
+    const cajaMensajes = document.getElementById('mensajes');
+    const input = document.getElementById('texto');
+
+    function enviar() {
+        if (input.value.trim() !== "") {
+            socket.send(input.value);
+            input.value = "";
+        }
+    }
+
+    // Escuchar tecla Enter
+    input.addEventListener("keypress", (e) => { if (e.key === "Enter") enviar(); });
+
+    socket.on('message', (msg) => {
+        const div = document.createElement('div');
+        div.className = 'bubble';
+        div.textContent = msg;
+        cajaMensajes.appendChild(div);
+        cajaMensajes.scrollTop = cajaMensajes.scrollHeight; // Auto-scroll abajo
+    });
+</script>
+
+</body>
+</html>
