@@ -8,17 +8,29 @@
     <style>
         * { box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #e5ddd5; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #chat-container { width: 100%; max-width: 450px; height: 90vh; background: #fff; display: flex; flex-direction: column; border-radius: 15px; shadow: 0 10px 25px rgba(0,0,0,0.2); overflow: hidden; }
+        
+        /* Pantalla de Inicio */
+        #pantalla-inicio { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #075e54; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; color: white; }
+        #pantalla-inicio input { padding: 15px; border-radius: 25px; border: none; width: 250px; margin-bottom: 10px; font-size: 1em; text-align: center; }
+        
+        /* Chat (oculto al principio) */
+        #chat-container { display: none; width: 100%; max-width: 450px; height: 90vh; background: #fff; flex-direction: column; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); overflow: hidden; }
         #header { background: #075e54; color: white; padding: 20px; text-align: center; font-size: 1.4em; font-weight: bold; }
         #mensajes { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #efe7dd; }
         .bubble { background: white; padding: 10px 15px; border-radius: 10px; width: fit-content; max-width: 85%; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .user-name { font-weight: bold; font-size: 0.8em; color: #075e54; display: block; margin-bottom: 3px; }
         #input-area { padding: 15px; background: #f0f0f0; display: flex; gap: 10px; }
-        input { flex: 1; padding: 12px; border: none; border-radius: 25px; outline: none; font-size: 1em; }
+        #texto { flex: 1; padding: 12px; border: none; border-radius: 25px; outline: none; }
         button { background: #128c7e; color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #075e54; }
     </style>
 </head>
 <body>
+
+<div id="pantalla-inicio">
+    <h1>Sifiki Chat 🚀</h1>
+    <input type="text" id="nombre-input" placeholder="Tu nombre o apodo..." autocomplete="off">
+    <button onclick="entrarAlChat()">Entrar al Chat</button>
+</div>
 
 <div id="chat-container">
     <div id="header">Sifiki Chat 🚀</div>
@@ -31,26 +43,46 @@
 
 <script>
     const socket = io();
-    const cajaMensajes = document.getElementById('mensajes');
-    const input = document.getElementById('texto');
+    let miNombre = "";
 
-    function enviar() {
-        if (input.value.trim() !== "") {
-            socket.send(input.value);
-            input.value = "";
+    function entrarAlChat() {
+        const inputNombre = document.getElementById('nombre-input');
+        if (inputNombre.value.trim() !== "") {
+            miNombre = inputNombre.value;
+            document.getElementById('pantalla-inicio').style.display = 'none';
+            document.getElementById('chat-container').style.display = 'flex';
         }
     }
 
-    // Escuchar tecla Enter
-    input.addEventListener("keypress", (e) => { if (e.key === "Enter") enviar(); });
+    function enviar() {
+        const inputMsg = document.getElementById('texto');
+        if (inputMsg.value.trim() !== "") {
+            // Enviamos un OBJETO con nombre y mensaje
+            socket.send({ usuario: miNombre, msg: inputMsg.value });
+            inputMsg.value = "";
+        }
+    }
 
-    socket.on('message', (msg) => {
+    socket.on('message', (data) => {
+        const cajaMensajes = document.getElementById('mensajes');
         const div = document.createElement('div');
         div.className = 'bubble';
-        div.textContent = msg;
+        
+        // Si recibimos un objeto de un nuevo mensaje
+        if (typeof data === 'object') {
+            div.innerHTML = `<span class="user-name">${data.usuario}</span>${data.msg}`;
+        } else {
+            // Para los mensajes antiguos guardados en la base de datos (que son solo texto)
+            div.textContent = data;
+        }
+        
         cajaMensajes.appendChild(div);
-        cajaMensajes.scrollTop = cajaMensajes.scrollHeight; // Auto-scroll abajo
+        cajaMensajes.scrollTop = cajaMensajes.scrollHeight;
     });
+
+    // Soporte para tecla Enter en ambos inputs
+    document.getElementById('nombre-input').addEventListener("keypress", (e) => { if (e.key === "Enter") entrarAlChat(); });
+    document.getElementById('texto').addEventListener("keypress", (e) => { if (e.key === "Enter") enviar(); });
 </script>
 
 </body>
