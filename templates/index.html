@@ -3,86 +3,223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sifiki Chat</title>
+    <title>Sifiki Discord Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
+        :root {
+            --bg-server-list: #1e1f22;
+            --bg-channels: #2b2d31;
+            --bg-chat: #313338;
+            --bg-users: #2b2d31;
+            --bg-input: #383a40;
+            --text-normal: #dbdee1;
+            --text-muted: #949ba4;
+            --brand: #5865f2;
+            --admin: #f1c40f;
+            --mod: #2ecc71;
+            --user: #9b59b6;
+        }
+
         * { box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #e5ddd5; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'gg sans', 'Helvetica Neue', Arial; background: var(--bg-server-list); overflow: hidden; }
+
+        /* Pantalla de Entrada */
+        #login-overlay { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85); 
+            display: flex; align-items: center; justify-content: center; z-index: 9999; 
+        }
+        .login-box { background: var(--bg-channels); padding: 40px; border-radius: 8px; width: 400px; text-align: center; box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
+        .login-box input, .login-box select { 
+            width: 100%; padding: 12px; margin: 10px 0; border-radius: 4px; border: none; background: var(--bg-server-list); color: white; 
+        }
+
+        /* Layout Principal */
+        .main-wrapper { display: flex; height: 100vh; width: 100vw; }
+
+        /* 1. Lista de Servidores (Iconos a la izquierda) */
+        .server-sidebar { width: 72px; background: var(--bg-server-list); display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; }
+        .server-icon { width: 48px; height: 48px; background: var(--bg-chat); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; color: white; font-weight: bold; }
+        .server-icon:hover { border-radius: 15px; background: var(--brand); }
+
+        /* 2. Lista de Canales */
+        .channels-sidebar { width: 240px; background: var(--bg-channels); display: flex; flex-direction: column; }
+        .header-section { height: 48px; border-bottom: 1px solid #1f2023; display: flex; align-items: center; padding: 0 16px; font-weight: bold; color: white; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .channel-list { flex: 1; padding: 10px 8px; }
+        .channel-item { padding: 6px 8px; border-radius: 4px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+        .channel-item:hover { background: rgba(255,255,255,0.05); color: var(--text-normal); }
+        .channel-item.active { background: rgba(255,255,255,0.1); color: white; }
+
+        /* 3. Área de Chat */
+        .chat-container { flex: 1; display: flex; flex-direction: column; background: var(--bg-chat); }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
         
-        /* Pantalla de Inicio */
-        #pantalla-inicio { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #075e54; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; color: white; }
-        #pantalla-inicio input { padding: 15px; border-radius: 25px; border: none; width: 250px; margin-bottom: 10px; font-size: 1em; text-align: center; }
-        
-        /* Chat (oculto al principio) */
-        #chat-container { display: none; width: 100%; max-width: 450px; height: 90vh; background: #fff; flex-direction: column; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); overflow: hidden; }
-        #header { background: #075e54; color: white; padding: 20px; text-align: center; font-size: 1.4em; font-weight: bold; }
-        #mensajes { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #efe7dd; }
-        .bubble { background: white; padding: 10px 15px; border-radius: 10px; width: fit-content; max-width: 85%; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .user-name { font-weight: bold; font-size: 0.8em; color: #075e54; display: block; margin-bottom: 3px; }
-        #input-area { padding: 15px; background: #f0f0f0; display: flex; gap: 10px; }
-        #texto { flex: 1; padding: 12px; border: none; border-radius: 25px; outline: none; }
-        button { background: #128c7e; color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-weight: bold; }
+        /* Mensajes Individuales */
+        .msg-group { display: flex; gap: 16px; }
+        .msg-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--brand); flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
+        .msg-content { display: flex; flex-direction: column; }
+        .msg-header { display: flex; align-items: center; gap: 8px; }
+        .username { font-weight: 500; cursor: pointer; }
+        .username:hover { text-decoration: underline; }
+        .time { font-size: 12px; color: var(--text-muted); }
+        .text { color: var(--text-normal); line-height: 1.4; margin-top: 2px; }
+
+        /* Input de mensaje */
+        .input-area { padding: 0 16px 24px 16px; }
+        .input-wrapper { background: var(--bg-input); border-radius: 8px; padding: 11px 16px; }
+        #msg-input { background: transparent; border: none; color: white; width: 100%; outline: none; font-size: 15px; }
+
+        /* 4. Lista de Usuarios (Derecha) */
+        .users-sidebar { width: 240px; background: var(--bg-users); padding: 20px 8px; display: flex; flex-direction: column; gap: 10px; }
+        .user-category { font-size: 12px; font-weight: bold; color: var(--text-muted); text-transform: uppercase; margin-left: 8px; }
+        .user-card { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+        .user-card:hover { background: rgba(255,255,255,0.05); }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #23a55a; border: 2px solid var(--bg-users); }
+
+        /* Colores de Roles */
+        .admin { color: var(--admin); }
+        .mod { color: var(--mod); }
+        .user { color: var(--user); }
+
     </style>
 </head>
 <body>
 
-<div id="pantalla-inicio">
-    <h1>Sifiki Chat 🚀</h1>
-    <input type="text" id="nombre-input" placeholder="Tu nombre o apodo..." autocomplete="off">
-    <button onclick="entrarAlChat()">Entrar al Chat</button>
+<div id="login-overlay">
+    <div class="login-box">
+        <h2 style="color: white; margin-bottom: 8px;">¡Hola de nuevo!</h2>
+        <p style="color: var(--text-muted); margin-bottom: 20px;">Estamos muy emocionados de volver a verte.</p>
+        <input type="text" id="username" placeholder="Tu nombre de usuario" autocomplete="off">
+        <select id="role">
+            <option value="user">Usuario Estándar</option>
+            <option value="mod">Moderador</option>
+            <option value="admin">Administrador del Sistema</option>
+        </select>
+        <button onclick="login()" style="width: 100%; padding: 12px; background: var(--brand); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px;">Entrar al Servidor</button>
+    </div>
 </div>
 
-<div id="chat-container">
-    <div id="header">Sifiki Chat 🚀</div>
-    <div id="mensajes"></div>
-    <div id="input-area">
-        <input type="text" id="texto" placeholder="Escribe un mensaje..." autocomplete="off">
-        <button onclick="enviar()">Enviar</button>
+<div class="main-wrapper">
+    <div class="server-sidebar">
+        <div class="server-icon" style="background: var(--brand); border-radius: 15px;">S</div>
+        <div style="width: 32px; height: 2px; background: var(--bg-input); margin: 4px 0;"></div>
+        <div class="server-icon">F</div>
+        <div class="server-icon">K</div>
+    </div>
+
+    <div class="channels-sidebar">
+        <div class="header-section">Sifiki Official 🚀</div>
+        <div class="channel-list">
+            <div class="channel-item active" onclick="setChannel('general')"><span>#</span> general</div>
+            <div class="channel-item" onclick="setChannel('proyectos')"><span>#</span> proyectos</div>
+            <div class="channel-item" onclick="setChannel('ayuda')"><span>#</span> ayuda</div>
+            <div style="margin-top: 20px;" class="user-category">Mensajes Directos</div>
+            <div class="channel-item"><span>@</span> Sifiki Bot</div>
+        </div>
+    </div>
+
+    <div class="chat-container">
+        <div class="header-section" id="channel-name"># general</div>
+        <div class="chat-messages" id="chat-box"></div>
+        <div class="input-area">
+            <div class="input-wrapper">
+                <input type="text" id="msg-input" placeholder="Enviar mensaje...">
+            </div>
+        </div>
+    </div>
+
+    <div class="users-sidebar" id="user-list">
+        <div class="user-category">En línea — 1</div>
+        <div class="user-card">
+            <div class="msg-avatar" style="width: 32px; height: 32px; font-size: 12px;">B</div>
+            <span class="username" style="color: var(--brand)">Sifiki Bot</span>
+        </div>
     </div>
 </div>
 
 <script>
     const socket = io();
-    let miNombre = "";
+    let currentUser = { name: "", role: "", channel: "general" };
 
-    function entrarAlChat() {
-        const inputNombre = document.getElementById('nombre-input');
-        if (inputNombre.value.trim() !== "") {
-            miNombre = inputNombre.value;
-            document.getElementById('pantalla-inicio').style.display = 'none';
-            document.getElementById('chat-container').style.display = 'flex';
+    function login() {
+        const nameInput = document.getElementById('username');
+        const roleInput = document.getElementById('role');
+        
+        if (nameInput.value.trim()) {
+            currentUser.name = nameInput.value;
+            currentUser.role = roleInput.value;
+            document.getElementById('login-overlay').style.display = 'none';
+            
+            // Unirse al canal inicial
+            socket.emit('join', { channel: currentUser.channel, user: currentUser.name });
+            
+            // Agregarme a la lista de usuarios visual
+            addUserToList(currentUser.name, currentUser.role);
         }
     }
 
-    function enviar() {
-        const inputMsg = document.getElementById('texto');
-        if (inputMsg.value.trim() !== "") {
-            // Enviamos un OBJETO con nombre y mensaje
-            socket.send({ usuario: miNombre, msg: inputMsg.value });
-            inputMsg.value = "";
+    function setChannel(name) {
+        currentUser.channel = name;
+        document.getElementById('channel-name').innerText = `# ${name}`;
+        document.getElementById('chat-box').innerHTML = ''; // Limpiar chat al cambiar
+        
+        // Actualizar UI
+        document.querySelectorAll('.channel-item').forEach(item => {
+            item.classList.toggle('active', item.innerText.includes(name));
+        });
+
+        socket.emit('join', { channel: name, user: currentUser.name });
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('msg-input');
+        if (input.value.trim()) {
+            const payload = {
+                user: currentUser.name,
+                role: currentUser.role,
+                msg: input.value,
+                channel: currentUser.channel,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            socket.emit('chat-msg', payload);
+            input.value = '';
         }
+    }
+
+    function addUserToList(name, role) {
+        const list = document.getElementById('user-list');
+        const card = document.createElement('div');
+        card.className = 'user-card';
+        card.innerHTML = `
+            <div class="msg-avatar" style="width: 32px; height: 32px; font-size: 12px; background: #444;">${name[0]}</div>
+            <span class="username ${role}">${name}</span>
+        `;
+        list.appendChild(card);
     }
 
     socket.on('message', (data) => {
-        const cajaMensajes = document.getElementById('mensajes');
-        const div = document.createElement('div');
-        div.className = 'bubble';
-        
-        // Si recibimos un objeto de un nuevo mensaje
-        if (typeof data === 'object') {
-            div.innerHTML = `<span class="user-name">${data.usuario}</span>${data.msg}`;
-        } else {
-            // Para los mensajes antiguos guardados en la base de datos (que son solo texto)
-            div.textContent = data;
+        if (data.channel === currentUser.channel) {
+            const chatBox = document.getElementById('chat-box');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'msg-group';
+            
+            msgDiv.innerHTML = `
+                <div class="msg-avatar">${data.user[0].toUpperCase()}</div>
+                <div class="msg-content">
+                    <div class="msg-header">
+                        <span class="username ${data.role}">${data.user}</span>
+                        <span class="time">Hoy a las ${data.time || '12:00'}</span>
+                    </div>
+                    <div class="text">${data.msg}</div>
+                </div>
+            `;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
         }
-        
-        cajaMensajes.appendChild(div);
-        cajaMensajes.scrollTop = cajaMensajes.scrollHeight;
     });
 
-    // Soporte para tecla Enter en ambos inputs
-    document.getElementById('nombre-input').addEventListener("keypress", (e) => { if (e.key === "Enter") entrarAlChat(); });
-    document.getElementById('texto').addEventListener("keypress", (e) => { if (e.key === "Enter") enviar(); });
+    document.getElementById('msg-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
 </script>
 
 </body>
