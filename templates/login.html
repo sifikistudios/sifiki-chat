@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - Sifiki</title>
+    <style>
+        body { background: #1e1f22; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+        .card { background: #2b2d31; padding: 30px; border-radius: 8px; width: 300px; }
+        input { width: 100%; margin: 10px 0; padding: 10px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #5865f2; color: white; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Registro</h2>
+        <form action="/register" method="POST" enctype="multipart/form-data">
+            <input type="text" name="username" placeholder="Usuario" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Contraseña" required>
+            <input type="file" name="pfp" accept="image/*">
+            <button type="submit">Crear Cuenta</button>
+        </form>
+        <hr>
+        <h2>Login</h2>
+        <form action="/login" method="POST">
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Contraseña" required>
+            <button type="submit">Entrar</button>
+        </form>
+    </div>
+</body>
+</html>
