@@ -1,106 +1,158 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Sifiki Discord</title>
+    <meta charset="UTF-8">
+    <title>Sifiki Discord Cloud</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        :root { --bg-side: #2b2d31; --bg-chat: #313338; --brand: #5865f2; }
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #1e1f22; color: white; overflow: hidden; }
+        :root { --bg-dark: #1e1f22; --bg-mid: #2b2d31; --bg-chat: #313338; --brand: #5865f2; }
+        body { margin: 0; font-family: sans-serif; background: var(--bg-dark); color: white; display: flex; height: 100vh; }
         
-        .channels { width: 240px; background: var(--bg-side); display: flex; flex-direction: column; }
-        .chat-area { flex: 1; background: var(--bg-chat); display: flex; flex-direction: column; }
-        .members { width: 240px; background: var(--bg-side); padding: 20px 10px; }
+        /* Auth Overlay */
+        #auth-overlay { position: fixed; inset: 0; background: var(--bg-dark); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+        .auth-card { background: var(--bg-mid); padding: 30px; border-radius: 8px; width: 350px; display: flex; flex-direction: column; gap: 10px; }
+        input { padding: 10px; border-radius: 4px; border: none; background: #1e1f22; color: white; }
+        
+        /* Layout */
+        .sidebar { width: 240px; background: var(--bg-mid); display: flex; flex-direction: column; }
+        .chat { flex: 1; background: var(--bg-chat); display: flex; flex-direction: column; }
+        
+        .nav-item { padding: 10px 15px; cursor: pointer; color: #949ba4; }
+        .nav-item:hover, .active { background: #3f4147; color: white; }
+        .voice-active { color: #23a55a !important; font-weight: bold; }
 
-        .msg { display: flex; gap: 15px; margin-bottom: 15px; padding: 5px 15px; }
+        #messages { flex: 1; overflow-y: auto; padding: 20px; }
+        .msg-row { display: flex; gap: 15px; margin-bottom: 15px; }
         .pfp { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
-        .owner { color: #ed4245; font-weight: bold; }
-        .user-item { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 4px; cursor: pointer; }
-        .user-item:hover { background: #3f4147; }
+        .owner-tag { color: #ed4245; font-weight: bold; }
         
-        #messages { flex: 1; overflow-y: auto; padding-top: 20px; }
-        .input-box { padding: 20px; }
-        .inner-box { background: #383a40; padding: 10px; border-radius: 8px; display: flex; }
-        input { background: transparent; border: none; color: white; flex: 1; outline: none; }
+        .input-area { padding: 20px; }
+        .box { background: #383a40; padding: 10px; border-radius: 8px; display: flex; }
+        #msg-in { background: transparent; border: none; color: white; flex: 1; outline: none; }
     </style>
 </head>
 <body>
 
-<div class="channels">
-    <div style="padding:15px; font-weight:bold; border-bottom:1px solid #232428;">Sifiki Server</div>
-    <div style="padding:10px; color:#949ba4; cursor:pointer;" onclick="setRoom('general')"># general</div>
-    <div style="padding:10px; color:#949ba4; cursor:pointer;" onclick="setRoom('fotos')"># fotos</div>
+<div id="auth-overlay">
+    <div class="auth-card" id="auth-box">
+        <h2>Sifiki Discord</h2>
+        <input type="email" id="email" placeholder="Correo electrónico">
+        <input type="text" id="user" placeholder="Nombre de usuario">
+        <input type="password" id="pass" placeholder="Contraseña">
+        <label style="font-size: 12px;">Foto de Perfil:</label>
+        <input type="file" id="pfp-input" accept="image/*">
+        <button onclick="register()" style="background:var(--brand); color:white; border:none; padding:10px; cursor:pointer;">Registrarse</button>
+        <p onclick="toggleAuth()" style="font-size:12px; cursor:pointer; text-align:center;">¿Ya tienes cuenta? Login</p>
+    </div>
 </div>
 
-<div class="chat-area">
+<div class="sidebar">
+    <div style="padding:15px; font-weight:bold; border-bottom:1px solid #232428;">Sifiki Server</div>
+    <div class="nav-item active" onclick="setRoom('general', this)"># general</div>
+    <div class="nav-item" onclick="setRoom('proyectos', this)"># proyectos</div>
+    <div class="nav-item" onclick="setRoom('multimedia', this)"># multimedia</div>
+    <div style="margin-top:20px; padding:10px; font-size:12px; color:#949ba4;">CANALES DE VOZ</div>
+    <div class="nav-item" id="voice-chan" onclick="toggleVoice()">🔊 General Voz</div>
+</div>
+
+<div class="chat">
     <div id="messages"></div>
-    <div class="input-box">
-        <div class="inner-box">
-            <input type="text" id="min" placeholder="Enviar mensaje...">
+    <div class="input-area">
+        <div class="box">
+            <button onclick="document.getElementById('file-in').click()">+</button>
+            <input type="file" id="file-in" hidden onchange="uploadMedia(this)">
+            <input type="text" id="msg-in" placeholder="Enviar mensaje...">
         </div>
     </div>
 </div>
 
-<div class="members">
-    <div style="font-size:12px; color:#949ba4; font-weight:bold; margin-bottom:10px;">MIEMBROS EN LÍNEA</div>
-    <div id="user-list"></div>
-</div>
-
 <script>
     const socket = io();
-    let currentRoom = 'general';
+    let userData = { name: "", role: "", avatar: "", channel: "general" };
+    let isVoice = false;
 
-    function setRoom(room) {
-        currentRoom = room;
-        document.getElementById('messages').innerHTML = '';
-        socket.emit('join', { channel: room });
+    // --- AUTENTICACIÓN ---
+    function register() {
+        const file = document.getElementById('pfp-input').files[0];
+        const reader = new FileReader();
+        reader.onload = () => {
+            socket.emit('register', {
+                email: document.getElementById('email').value,
+                username: document.getElementById('user').value,
+                password: document.getElementById('pass').value,
+                avatar: reader.result
+            });
+        };
+        if(file) reader.readAsDataURL(file);
+        else alert("Sube una foto de perfil");
     }
 
-    // Actualizar barra de personas
-    socket.on('update_user_list', (users) => {
-        const list = document.getElementById('user-list');
-        list.innerHTML = '';
-        for (let name in users) {
-            const div = document.createElement('div');
-            div.className = 'user-item';
-            div.onclick = () => openDM(name);
-            div.innerHTML = `
-                <img src="${users[name].avatar}" style="width:30px; height:30px; border-radius:50%">
-                <span class="${users[name].role}">${name}</span>
-            `;
-            list.appendChild(div);
-        }
+    socket.on('auth_response', (data) => {
+        if(data.status === 'success') {
+            userData = { name: data.user, role: data.role, avatar: data.avatar, channel: 'general' };
+            document.getElementById('auth-overlay').style.display = 'none';
+            setRoom('general', document.querySelector('.nav-item'));
+        } else alert(data.msg);
     });
 
-    function openDM(target) {
-        // Lógica de DM aquí
-        alert("Abriendo chat privado con " + target);
+    // --- FUNCIONALIDAD ---
+    function setRoom(name, el) {
+        userData.channel = name;
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('messages').innerHTML = '';
+        socket.emit('join', { channel: name, user: userData.name });
     }
 
-    document.getElementById('min').onkeypress = (e) => {
+    function toggleVoice() {
+        isVoice = !isVoice;
+        const btn = document.getElementById('voice-chan');
+        btn.classList.toggle('voice-active', isVoice);
+        if(isVoice) alert("Conectado a voz (Simulado: Tu micro está activo)");
+    }
+
+    function uploadMedia(input) {
+        const file = input.files[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            socket.emit('chat-msg', {
+                user: userData.name, avatar: userData.avatar, role: userData.role,
+                channel: userData.channel, msg: e.target.result, type: file.type.startsWith('image') ? 'image' : 'video'
+            });
+        };
+        reader.readAsDataURL(file);
+    }
+
+    document.getElementById('msg-in').onkeypress = (e) => {
         if(e.key === 'Enter' && e.target.value.trim()){
-            socket.emit('chat-msg', { channel: currentRoom, msg: e.target.value, type: 'text' });
+            socket.emit('chat-msg', { 
+                user: userData.name, avatar: userData.avatar, role: userData.role,
+                channel: userData.channel, msg: e.target.value, type: 'text' 
+            });
             e.target.value = '';
         }
     };
 
     socket.on('message', (data) => {
-        if(data.channel !== currentRoom) return;
+        if(data.channel !== userData.channel) return;
         const box = document.getElementById('messages');
         const div = document.createElement('div');
-        div.className = 'msg';
+        div.className = 'msg-row';
+        
+        let content = data.type === 'text' ? `<div>${data.msg}</div>` : 
+                      data.type === 'image' ? `<img src="${data.msg}" style="max-width:300px; border-radius:8px;">` : 
+                      `<video src="${data.msg}" controls style="max-width:300px;"></video>`;
+
         div.innerHTML = `
             <img src="${data.avatar}" class="pfp">
             <div>
-                <span class="${data.role}">${data.user}</span> <span style="font-size:10px; color:#949ba4">${data.time}</span>
-                <div>${data.msg}</div>
+                <span class="${data.role === 'owner' ? 'owner-tag' : ''}">${data.user}</span>
+                ${content}
             </div>
         `;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
     });
-
-    // Iniciar
-    setRoom('general');
 </script>
 </body>
 </html>
