@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sifiki Discord</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        :root { --bg-side: #2b2d31; --bg-chat: #313338; --brand: #5865f2; }
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #1e1f22; color: white; overflow: hidden; }
+        
+        .channels { width: 240px; background: var(--bg-side); display: flex; flex-direction: column; }
+        .chat-area { flex: 1; background: var(--bg-chat); display: flex; flex-direction: column; }
+        .members { width: 240px; background: var(--bg-side); padding: 20px 10px; }
+
+        .msg { display: flex; gap: 15px; margin-bottom: 15px; padding: 5px 15px; }
+        .pfp { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        .owner { color: #ed4245; font-weight: bold; }
+        .user-item { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 4px; cursor: pointer; }
+        .user-item:hover { background: #3f4147; }
+        
+        #messages { flex: 1; overflow-y: auto; padding-top: 20px; }
+        .input-box { padding: 20px; }
+        .inner-box { background: #383a40; padding: 10px; border-radius: 8px; display: flex; }
+        input { background: transparent; border: none; color: white; flex: 1; outline: none; }
+    </style>
+</head>
+<body>
+
+<div class="channels">
+    <div style="padding:15px; font-weight:bold; border-bottom:1px solid #232428;">Sifiki Server</div>
+    <div style="padding:10px; color:#949ba4; cursor:pointer;" onclick="setRoom('general')"># general</div>
+    <div style="padding:10px; color:#949ba4; cursor:pointer;" onclick="setRoom('fotos')"># fotos</div>
+</div>
+
+<div class="chat-area">
+    <div id="messages"></div>
+    <div class="input-box">
+        <div class="inner-box">
+            <input type="text" id="min" placeholder="Enviar mensaje...">
+        </div>
+    </div>
+</div>
+
+<div class="members">
+    <div style="font-size:12px; color:#949ba4; font-weight:bold; margin-bottom:10px;">MIEMBROS EN LÍNEA</div>
+    <div id="user-list"></div>
+</div>
+
+<script>
+    const socket = io();
+    let currentRoom = 'general';
+
+    function setRoom(room) {
+        currentRoom = room;
+        document.getElementById('messages').innerHTML = '';
+        socket.emit('join', { channel: room });
+    }
+
+    // Actualizar barra de personas
+    socket.on('update_user_list', (users) => {
+        const list = document.getElementById('user-list');
+        list.innerHTML = '';
+        for (let name in users) {
+            const div = document.createElement('div');
+            div.className = 'user-item';
+            div.onclick = () => openDM(name);
+            div.innerHTML = `
+                <img src="${users[name].avatar}" style="width:30px; height:30px; border-radius:50%">
+                <span class="${users[name].role}">${name}</span>
+            `;
+            list.appendChild(div);
+        }
+    });
+
+    function openDM(target) {
+        // Lógica de DM aquí
+        alert("Abriendo chat privado con " + target);
+    }
+
+    document.getElementById('min').onkeypress = (e) => {
+        if(e.key === 'Enter' && e.target.value.trim()){
+            socket.emit('chat-msg', { channel: currentRoom, msg: e.target.value, type: 'text' });
+            e.target.value = '';
+        }
+    };
+
+    socket.on('message', (data) => {
+        if(data.channel !== currentRoom) return;
+        const box = document.getElementById('messages');
+        const div = document.createElement('div');
+        div.className = 'msg';
+        div.innerHTML = `
+            <img src="${data.avatar}" class="pfp">
+            <div>
+                <span class="${data.role}">${data.user}</span> <span style="font-size:10px; color:#949ba4">${data.time}</span>
+                <div>${data.msg}</div>
+            </div>
+        `;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    });
+
+    // Iniciar
+    setRoom('general');
+</script>
+</body>
+</html>
