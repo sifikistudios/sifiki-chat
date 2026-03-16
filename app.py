@@ -1,22 +1,25 @@
 from flask import Flask, render_template
-from flask_socketio import SocketIO, send, emit
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_sqlalchemy import SQLAlchemy
-import os
+import datetime
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'sifiki_secret_123'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///chat.db'
+app.config['SECRET_KEY'] = 'sifiki_discord_secret'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sifiki_discord.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Modelo de la base de datos
+# --- MODELO DE BASE DE DATOS MEJORADO ---
 class Mensaje(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    contenido = db.Column(db.String(500), nullable=False)
+    usuario = db.Column(db.String(50), nullable=False)
+    rol = db.Column(db.String(20), nullable=False)
+    canal = db.Column(db.String(50), nullable=False)
+    msg = db.Column(db.String(500), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
-# Crear la base de datos al iniciar
 with app.app_context():
     db.create_all()
 
@@ -24,29 +27,50 @@ with app.app_context():
 def index():
     return render_template('index.html')
 
-# Busca la función handle_message y cámbiala por esta:
-@socketio.on('message')
-def handle_message(data):
-    # 'data' ahora será un diccionario: {'usuario': 'paco', 'msg': 'hola'}
-    nombre = data.get('usuario', 'Anónimo')
-    mensaje_texto = data.get('msg', '')
+# --- LÓGICA DE CANALES (JOIN) ---
+@socketio.on('join')
+def on_join(data):
+    username = data.get('user', 'Anónimo')
+    room = data.get('channel', 'general')
     
-    contenido_final = f"{nombre}: {mensaje_texto}"
+    join_room(room)
     
-    # Guardar en la base de datos
-    nuevo_mensaje = Mensaje(contenido=contenido_final)
-    db.session.add(nuevo_mensaje)
-    db.session.commit()
-    
-    # Enviar a todos
-    send(data, broadcast=True)
+    # Enviar historial solo de ese canal
+    historial = Mensaje.query.filter_by(canal=room).order_by(Mensaje.id.desc()).limit(20).all()
+    for m in reversed(historial):
+        emit('message', {
+            'user': m.usuario,
+            'role': m.rol,
+            'msg': m.msg,
+            'channel': m.canal,
+            'time': m.timestamp.strftime('%H:%M')
+        })
 
-@socketio.on('connect')
-def handle_connect():
-    # Enviar los últimos 10 mensajes al nuevo usuario que entra
-    ultimos_mensajes = Mensaje.query.order_by(Mensaje.id.desc()).limit(10).all()
-    for msg in reversed(ultimos_mensajes):
-        send(msg.contenido)
+# --- MANEJO DE MENSAJES ---
+@socketio.on('chat-msg')
+def handle_chat_message(data):
+    # Extraer datos del JSON enviado por el frontend
+    usuario = data.get('user')
+    rol = data.get('role')
+    msg_texto = data.get('msg')
+    canal = data.get('channel')
+    hora_actual = datetime.datetime.now().strftime('%H:%M')
+
+    # Guardar en DB de forma estructurada
+    nuevo_msg = Mensaje(
+        usuario=usuario,
+        rol=rol,
+        canal=canal,
+        msg=msg_texto
+    )
+    db.session.add(nuevo_msg)
+    db.session.commit()
+
+    # Añadir la hora para el frontend
+    data['time'] = hora_actual
+
+    # Emitir SOLO al canal correspondiente (room)
+    emit('message', data, to=canal)
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)
